@@ -49,4 +49,23 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 });
 
 
+router.get("/query", async (req, res) => {
+  const { question } = req.query;
 
+  let answer = "I couldn’t understand your question.";
+
+  // /total/i = If question contains 'total', i->case-insensitive flag
+  if (/total/i.test(question)) { 
+    const total = await Invoice.aggregate([{ $group: { _id: null, sum: { $sum: "$totalAmount" } } }]);
+    answer = `Total amount of all invoices: $${total[0]?.sum || 0}`;
+  } else if (/date/i.test(question)) {
+    // -1 → descending order
+    const invoices = await Invoice.find().sort({ date: -1 }).limit(1);
+    answer = `Latest invoice date: ${invoices[0]?.date}`;
+  }
+
+  res.json({ answer });
+});
+
+
+module.exports = router;
