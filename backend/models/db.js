@@ -8,4 +8,4 @@ const invoiceSchema = new mongoose.Schema({
     rawText:String
 })
 
-module.exports = mongoose.models("invoice", invoiceSchema)
+module.exports = mongoose.model("invoice", invoiceSchema)
