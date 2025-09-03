@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export default function Main({ 
   activeTab, 
   file, 
@@ -9,37 +11,90 @@ export default function Main({
   isProcessing, 
   setIsProcessing 
 }) {
-  const handleFileChange = (e) => {
+  const [documentId, setDocumentId] = useState(null);
+  const API_BASE_URL = 'http://localhost:8080/api';
+
+  const handleFileChange = async (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
       setFile(selectedFile);
       setIsProcessing(true);
       
-      // Simulate processing delay
-      setTimeout(() => {
-        setIsProcessing(false);
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          setDocumentId(data.invoice.id);
+          setMessages([
+            { role: "assistant", text: "I've processed your invoice! You can now ask me questions about it." }
+          ]);
+        } else {
+          setMessages([
+            { role: "assistant", text: data.error || "Sorry, I couldn't process that file. Please try another one." }
+          ]);
+          setFile(null);
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
         setMessages([
-          { role: "assistant", text: "I've processed your invoice! You can now ask me questions about it." }
+          { role: "assistant", text: "There was an error processing your file. Please try again." }
         ]);
-      }, 2000);
+        setFile(null);
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || !documentId) return;
     
     // Add user message
-    const newMessages = [...messages, { role: "user", text: input }];
+    const userMessage = { role: "user", text: input };
+    const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput("");
     
-    // Simulate AI response after a short delay
-    setTimeout(() => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: input,
+          invoiceId: documentId
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setMessages([
+          ...newMessages,
+          { role: "assistant", text: data.answer }
+        ]);
+      } else {
+        setMessages([
+          ...newMessages,
+          { role: "assistant", text: data.error || "Sorry, I couldn't process your question. Please try again." }
+        ]);
+      }
+    } catch (error) {
+      console.error('Chat error:', error);
       setMessages([
         ...newMessages,
-        { role: "assistant", text: "Based on the invoice, the total amount is $1,245.50 with a due date of October 15, 2023." }
+        { role: "assistant", text: "There was an error processing your question. Please try again." }
       ]);
-    }, 1000);
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -50,6 +105,7 @@ export default function Main({
 
   const removeFile = () => {
     setFile(null);
+    setDocumentId(null);
     setMessages([]);
   };
 
@@ -168,7 +224,7 @@ export default function Main({
             />
             <button
               onClick={handleSend}
-              disabled={!file || !input.trim()}
+              disabled={!file || !input.trim() || isProcessing}
               className="bg-red-500 text-white font-semibold px-4 md:px-6 rounded-r-lg hover:bg-red-600 transition-colors disabled:bg-zinc-700 disabled:cursor-not-allowed"
             >
               Send
