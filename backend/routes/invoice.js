@@ -207,7 +207,7 @@ router.post("/chat", async (req, res) => {
     }
 
     answer = await getAIResponse(invoiceData, question);
-    let readableAnswer = answer.replace(/[*_`]/g, "").trim();
+    let readableAnswer = answer.trim().replace(/[*_`]/g, "");
     // console.log(readableAnswer);
 
     res.json({
