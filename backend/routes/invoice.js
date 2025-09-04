@@ -73,6 +73,7 @@ router.post("/upload", upload.array("files", 5), async (req, res) => {
       });
 
       invoices.push({
+        _id: invoice._id,
         vendor: invoice.vendor,
         invoice_number: invoice.invoice_number,
         invoice_date: invoice.invoice_date,
@@ -106,7 +107,7 @@ router.post("/chat", async (req, res) => {
     let answer = "";
 
     if (invoiceId) {
-      const invoiceData = await Invoice.findById(invoiceId);
+      let invoiceData = await Invoice.findOne({ invoice_number: invoiceId });
 
       if (!invoiceData) {
         return res.status(404).json({
@@ -122,8 +123,7 @@ router.post("/chat", async (req, res) => {
           Please answer the following question based on the invoice: "${question}"
 
           If the information is not available in the invoice, respond with "I couldn't find that information in the invoice."
-          Provide a helpful and concise answer:
-          `;
+          Provide a helpful and concise answer:`;
 
           const completion = await openai.chat.completions.create({
             model: "openai/gpt-oss-120b:free",
@@ -148,13 +148,15 @@ router.post("/chat", async (req, res) => {
       answer = await getAIResponse(invoiceData, question);
       answer = answer.trim().replace(/[*_`]/g, "");
 
-      return res.json({
+      return res.status(200).json({
         success: true,
         answer,
         invoiceId: invoiceData._id,
+        invoiceNumber: invoiceData.invoice_number,
       });
     }
 
+    // Handle general queries
     const invoices = await Invoice.find();
 
     // Q1: How many invoices are due in the next 7 days?
@@ -196,7 +198,9 @@ router.post("/chat", async (req, res) => {
       );
 
       if (vendorInvoice) {
-        answer = `The total value of the invoice from ${vendorInvoice.vendor} is $${vendorInvoice.total.toFixed(2)}`;
+        answer = `The total value of the invoice from ${
+          vendorInvoice.vendor
+        } is $${vendorInvoice.total.toFixed(2)}`;
       } else {
         answer = `No invoice found for vendor ${vendorName}`;
       }
@@ -210,12 +214,12 @@ router.post("/chat", async (req, res) => {
     // Q3: List all vendors with invoices > $2,000.
     const amountMatch = question.match(/invoices? > \$?([0-9,]+)/i);
     if (amountMatch) {
-      const threshold = parseFloat(amountMatch[1].replace(/,/g, ""));
+      const threshold = parseFloat(amountMatch[1].replace(/,/g, "")); // -> Removes commas: "2,000" → "2000". Bcz its valus check with the BD's total amount.
       const highInvoices = invoices.filter((inv) => inv.total > threshold);
 
       if (highInvoices.length > 0) {
         answer = highInvoices
-          .map((inv) => `${inv.vendor} ($${inv.total.toFixed(2)})`)
+          .map((inv) => `${inv.vendor} ($${inv.total.toFixed(2)})`) // -> Amazon ($2,450), Microsoft ($3,100)
           .join(", ");
       } else {
         answer = `No invoices greater than $${threshold}`;
@@ -227,13 +231,13 @@ router.post("/chat", async (req, res) => {
       });
     }
 
-    // Default fallback
+    // Default
     return res.json({
       success: true,
-      answer:"I could not understand your query.",
+      answer: "I could not understand your query.",
     });
   } catch (err) {
-    console.log("Chat error:", err);
+    console.log("chat error:", err);
     res.status(500).json({
       success: false,
       error: "Internal server error",
